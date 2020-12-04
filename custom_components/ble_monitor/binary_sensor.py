@@ -6,6 +6,7 @@ from threading import Thread
 
 from homeassistant.components.binary_sensor import (
     DEVICE_CLASS_LIGHT,
+    DEVICE_CLASS_MOTION,
     DEVICE_CLASS_OPENING,
     DEVICE_CLASS_POWER,
     BinarySensorEntity,
@@ -89,7 +90,7 @@ class BLEupdaterBinary(Thread):
                 mac = data["mac"]
                 batt_attr = None
                 sensortype = data["type"]
-                sw_i, op_i, l_i, b_i = MMTS_DICT[sensortype][1]
+                sw_i, op_i, l_i, mn_i, b_i = MMTS_DICT[sensortype][1]
                 if mac not in sensors_by_mac:
                     sensors = []
                     if sw_i != 9:
@@ -98,6 +99,8 @@ class BLEupdaterBinary(Thread):
                         sensors.insert(op_i, OpeningBinarySensor(self.config, mac, sensortype))
                     if l_i != 9:
                         sensors.insert(l_i, LightBinarySensor(self.config, mac, sensortype))
+                    if mn_i != 9:
+                        sensors.insert(mn_i, MotionBinarySensor(self.config, mac, sensortype))
                     if len(sensors) != 0:
                         sensors_by_mac[mac] = sensors
                         self.add_entities(sensors)
@@ -144,6 +147,13 @@ class BLEupdaterBinary(Thread):
                         light.schedule_update_ha_state(True)
                     elif light.ready_for_update is False and light.enabled is True:
                         hpriority.append(light)
+                if "motion" in data:
+                    motion = sensors[mn_i]
+                    motion.collect(data, batt_attr)
+                    if light.pending_update is True:
+                        light.schedule_update_ha_state(True)
+                    elif motion.ready_for_update is False and motion.enabled is True:
+                        hpriority.append(motion)
                 data = None
             ts_now = dt_util.now()
             if ts_now - ts_last < timedelta(seconds=self.period):
@@ -310,6 +320,19 @@ class LightBinarySensor(SwitchingSensor):
         self._name = "ble light {}".format(self._sensor_name)
         self._unique_id = "lt_" + self._sensor_name
         self._device_class = DEVICE_CLASS_LIGHT
+
+
+class MotionBinarySensor(SwitchingSensor):
+    """Representation of a Sensor."""
+
+    def __init__(self, config, mac, devtype):
+        """Initialize the sensor."""
+        super().__init__(config, mac, devtype)
+        self._measurement = "motion"
+        self._sensor_name = self.get_sensorname()
+        self._name = "ble motion {}".format(self._sensor_name)
+        self._unique_id = "mn_" + self._sensor_name
+        self._device_class = DEVICE_CLASS_MOTION
 
 
 class OpeningBinarySensor(SwitchingSensor):

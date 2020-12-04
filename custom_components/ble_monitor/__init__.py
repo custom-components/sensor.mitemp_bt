@@ -218,6 +218,10 @@ class HCIdump(Thread):
         def obj0510(xobj):
             return {"switch": xobj[0], "temperature": xobj[1]}
 
+        def obj0f00(xobj):
+            (illum,) = ILL_STRUCT.unpack(xobj + b'\x00')
+            return {"illuminance": illum, "motion": 1, "light": 1 if illum == 100 else 0}
+
         def reverse_mac(rmac):
             """Change LE order to BE."""
             if len(rmac) != 12:
@@ -284,6 +288,7 @@ class HCIdump(Thread):
             b'\x13\x10': (obj1310, False, True),
             b'\x07\x10': (obj0710, False, True),
             b'\x05\x10': (obj0510, True, True),
+            b'\x0f\x00': (obj0f00, True, True),
         }
 
     def process_hci_events(self, data):
