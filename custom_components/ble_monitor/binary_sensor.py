@@ -16,6 +16,7 @@ from homeassistant.const import (
     STATE_OFF,
     STATE_ON,
 )
+from homeassistant.helpers.event import call_later
 from homeassistant.helpers.restore_state import RestoreEntity
 import homeassistant.util.dt as dt_util
 
@@ -150,8 +151,8 @@ class BLEupdaterBinary(Thread):
                 if "motion" in data:
                     motion = sensors[mn_i]
                     motion.collect(data, batt_attr)
-                    if light.pending_update is True:
-                        light.schedule_update_ha_state(True)
+                    if motion.pending_update is True:
+                        motion.schedule_update_ha_state(True)
                     elif motion.ready_for_update is False and motion.enabled is True:
                         hpriority.append(motion)
                 data = None
@@ -333,6 +334,16 @@ class MotionBinarySensor(SwitchingSensor):
         self._name = "ble motion {}".format(self._sensor_name)
         self._unique_id = "mn_" + self._sensor_name
         self._device_class = DEVICE_CLASS_MOTION
+
+    def reset_state(self, event=None):
+        """reset state of the sensor (assume "event based" sensor)"""
+        self._state = False
+        self.schedule_update_ha_state(False)
+
+    def update(self):
+        """Update sensor state and attribute."""
+        self._state = self._newstate
+        call_later(self.hass, 2, self.reset_state)
 
 
 class OpeningBinarySensor(SwitchingSensor):
