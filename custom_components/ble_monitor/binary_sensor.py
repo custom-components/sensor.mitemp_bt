@@ -6,6 +6,7 @@ import logging
 from homeassistant.components.binary_sensor import (
     DEVICE_CLASS_LIGHT,
     DEVICE_CLASS_MOISTURE,
+    DEVICE_CLASS_MOTION,
     DEVICE_CLASS_OPENING,
     DEVICE_CLASS_POWER,
 )
@@ -23,6 +24,7 @@ from homeassistant.const import (
     STATE_OFF,
     STATE_ON,
 )
+from homeassistant.helpers.event import call_later
 from homeassistant.helpers.restore_state import RestoreEntity
 import homeassistant.util.dt as dt_util
 
@@ -103,7 +105,7 @@ class BLEupdaterBinary():
                 mac = data["mac"]
                 batt_attr = None
                 sensortype = data["type"]
-                sw_i, op_i, l_i, mo_i, b_i = MMTS_DICT[sensortype][1]
+                sw_i, op_i, l_i, mo_i, mn_i, b_i = MMTS_DICT[sensortype][1]
                 if mac not in sensors_by_mac:
                     sensors = []
                     if sw_i != 9:
@@ -114,6 +116,8 @@ class BLEupdaterBinary():
                         sensors.insert(l_i, LightBinarySensor(self.config, mac, sensortype))
                     if mo_i != 9:
                         sensors.insert(mo_i, MoistureBinarySensor(self.config, mac, sensortype))
+                    if mn_i != 9:
+                        sensors.insert(mn_i, MotionBinarySensor(self.config, mac, sensortype))
                     if len(sensors) != 0:
                         sensors_by_mac[mac] = sensors
                         self.add_entities(sensors)
@@ -167,6 +171,13 @@ class BLEupdaterBinary():
                         moisture.async_schedule_update_ha_state(True)
                     elif moisture.ready_for_update is False and moisture.enabled is True:
                         hpriority.append(moisture)
+                if "motion" in data:
+                    motion = sensors[mn_i]
+                    motion.collect(data, batt_attr)
+                    if motion.pending_update is True:
+                        motion.schedule_update_ha_state(True)
+                    elif motion.ready_for_update is False and motion.enabled is True:
+                        hpriority.append(motion)
                 data = None
             ts_now = dt_util.now()
             if ts_now - ts_last < timedelta(seconds=self.period):
@@ -214,7 +225,7 @@ class SwitchingSensor(RestoreEntity, BinarySensorEntity):
             self.ready_for_update = True
             return
         old_state = await self.async_get_last_state()
-        _LOGGER.debug(old_state)
+        _LOGGER.debug("Restored state: %s", old_state)
         if not old_state:
             self.ready_for_update = True
             return
@@ -395,3 +406,26 @@ class MoistureBinarySensor(SwitchingSensor):
         self._name = "ble moisture {}".format(self._sensor_name)
         self._unique_id = "mo_" + self._sensor_name
         self._device_class = DEVICE_CLASS_MOISTURE
+
+
+class MotionBinarySensor(SwitchingSensor):
+    """Representation of a Sensor."""
+
+    def __init__(self, config, mac, devtype):
+        """Initialize the sensor."""
+        super().__init__(config, mac, devtype)
+        self._measurement = "motion"
+        self._sensor_name = self.get_sensorname()
+        self._name = "ble motion {}".format(self._sensor_name)
+        self._unique_id = "mn_" + self._sensor_name
+        self._device_class = DEVICE_CLASS_MOTION
+
+    def reset_state(self, event=None):
+        """reset state of the sensor (assume "event based" sensor)"""
+        self._state = False
+        self.schedule_update_ha_state(False)
+
+    def update(self):
+        """Update sensor state and attribute."""
+        self._state = self._newstate
+        call_later(self.hass, 5, self.reset_state)
