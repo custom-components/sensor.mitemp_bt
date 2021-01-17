@@ -195,7 +195,7 @@ class BLEMonitorFlow(data_entry_flow.FlowHandler):
                 vol.Optional(CONF_MAC, default=self._sel_device.get(CONF_MAC) if self._sel_device.get(CONF_MAC) else ""): str,
                 vol.Optional(CONF_ENCRYPTION_KEY, default=self._sel_device.get(CONF_ENCRYPTION_KEY) if self._sel_device.get(CONF_ENCRYPTION_KEY) else ""): str,
                 vol.Optional(CONF_TEMPERATURE_UNIT, default=self._sel_device.get(CONF_TEMPERATURE_UNIT) if self._sel_device.get(CONF_TEMPERATURE_UNIT) else TEMP_CELSIUS): vol.In([TEMP_CELSIUS, TEMP_FAHRENHEIT]),
-                vol.Optional(CONF_DEVICE_RESET_TIMER, default=self._sel_device.get(CONF_DEVICE_RESET_TIMER) if self._sel_device.get(CONF_DEVICE_RESET_TIMER) else DEFAULT_DEVICE_RESET_TIMER): cv.positive_int,                
+                vol.Optional(CONF_DEVICE_RESET_TIMER, default=self._sel_device.get(CONF_DEVICE_RESET_TIMER) if self._sel_device.get(CONF_DEVICE_RESET_TIMER) else DEFAULT_DEVICE_RESET_TIMER): cv.positive_int,
             }
         )
 
