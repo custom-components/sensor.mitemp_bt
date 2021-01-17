@@ -32,6 +32,7 @@ from .const import (
     CONF_PERIOD,
     CONF_BATT_ENTITIES,
     CONF_RESTORE_STATE,
+    CONF_DEVICE_RESET_TIMER,
     KETTLES,
     MANUFACTURER_DICT,
     MMTS_DICT,
@@ -58,7 +59,6 @@ async def async_setup_entry(hass, config_entry, add_entities):
     return True
 
 
-# class BLEupdaterBinary(Thread):
 class BLEupdaterBinary():
     """BLE monitor entities updater."""
 
@@ -374,6 +374,18 @@ class LightBinarySensor(SwitchingSensor):
         self._unique_id = "lt_" + self._sensor_name
         self._device_class = DEVICE_CLASS_LIGHT
 
+    def reset_state(self, event=None):
+        """reset state of the sensor (assume "event based" sensor)"""
+        self._state = False
+        self.schedule_update_ha_state(False)
+
+    def update(self):
+        """Update sensor state and attribute."""
+        reset_timer = self._config[CONF_DEVICE_RESET_TIMER]
+        self._state = self._newstate
+        if reset_timer > 0:
+            call_later(self.hass, reset_timer, self.reset_state)
+
 
 class OpeningBinarySensor(SwitchingSensor):
     """Representation of a Sensor."""
@@ -427,5 +439,7 @@ class MotionBinarySensor(SwitchingSensor):
 
     def update(self):
         """Update sensor state and attribute."""
+        reset_timer = self._config[CONF_DEVICE_RESET_TIMER]
         self._state = self._newstate
-        call_later(self.hass, 5, self.reset_state)
+        if reset_timer > 0:
+            call_later(self.hass, reset_timer, self.reset_state)
