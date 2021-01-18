@@ -33,6 +33,7 @@ from .const import (
     CONF_BATT_ENTITIES,
     CONF_RESTORE_STATE,
     CONF_DEVICE_RESET_TIMER,
+    DEFAULT_DEVICE_RESET_TIMER,
     KETTLES,
     MANUFACTURER_DICT,
     MMTS_DICT,
@@ -198,23 +199,24 @@ class SwitchingSensor(RestoreEntity, BinarySensorEntity):
     def __init__(self, config, mac, devtype):
         """Initialize the sensor."""
         self.ready_for_update = False
-        self._sensor_name = ""
-        self._mac = mac
         self._config = config
-        self._restore_state = config[CONF_RESTORE_STATE]
+        self._mac = mac
+        self._fmac = ":".join(self._mac[i:i + 2] for i in range(0, len(self._mac), 2))
         self._name = ""
         self._state = None
-        self._unique_id = ""
+        self._device_settings = self.get_device_settings()
+        self._device_name = self._device_settings["name"]
+        self._device_class = None
         self._device_type = devtype
         self._device_manufacturer = MANUFACTURER_DICT[devtype]
         self._device_state_attributes = {}
         self._device_state_attributes["sensor type"] = devtype
-        self._device_state_attributes["mac address"] = (
-            ':'.join(mac[i:i + 2] for i in range(0, len(mac), 2))
-        )
-        self._device_class = None
-        self._newstate = None
+        self._device_state_attributes["mac address"] = self._fmac
+        self._unique_id = ""
         self._measurement = "measurement"
+        self._restore_state = config[CONF_RESTORE_STATE]
+        self._reset_timer = self._device_settings["reset timer"]
+        self._newstate = None
 
     async def async_added_to_hass(self):
         """Handle entity which will be added."""
@@ -289,7 +291,7 @@ class SwitchingSensor(RestoreEntity, BinarySensorEntity):
                 # Unique identifiers within a specific domain
                 (DOMAIN, self._device_state_attributes["mac address"])
             },
-            "name": self.get_sensorname(),
+            "name": self._device_name,
             "model": self._device_type,
             "manufacturer": self._device_manufacturer,
         }
@@ -299,28 +301,43 @@ class SwitchingSensor(RestoreEntity, BinarySensorEntity):
         """Force update."""
         return True
 
-    def get_sensorname(self):
-        """Set sensor name."""
+    def get_device_settings(self):
+        """Set device settings."""
+        device_settings = {}
+
+        # initial setup of device settings equal to integration settings
+        dev_name = self._mac
+        dev_reset_timer = DEFAULT_DEVICE_RESET_TIMER
+
+        # in UI mode device name is equal to mac (but can be overwritten in UI)
+        # in YAML mode device name is taken from config
+        # when changing from YAML mode to UI mode, we keep using the unique_id as device name from YAML
         id_selector = CONF_UNIQUE_ID
-        # if we work with yaml, then we take the name
-        # if not, then we check the unique_id created when switching from yaml
         if "ids_from_name" in self._config:
             id_selector = CONF_NAME
+
+        # overrule settings with device setting if available
         if self._config[CONF_DEVICES]:
-            fmac = ":".join(self._mac[i:i + 2] for i in range(0, len(self._mac), 2))
             for device in self._config[CONF_DEVICES]:
-                if fmac in device["mac"].upper():
+                if self._fmac in device["mac"].upper():
                     if id_selector in device:
-                        custom_name = device[id_selector]
-                        _LOGGER.debug(
-                            "Name of %s sensor with mac address %s is set to: %s",
-                            self._measurement,
-                            fmac,
-                            custom_name,
-                        )
-                        return custom_name
-                    break
-        return self._mac
+                        # get device name (from YAML config)
+                        dev_name = device[id_selector]
+                    if CONF_DEVICE_RESET_TIMER in device:
+                        dev_reset_timer = device[CONF_DEVICE_RESET_TIMER]
+        device_settings = {
+            "name": dev_name,
+            "reset timer": dev_reset_timer
+        }
+        _LOGGER.debug(
+            "Binary sensor device with mac address %s has the following settings. "
+            "Name: %s. "
+            "Reset Timer: %s",
+            self._fmac,
+            device_settings["name"],
+            device_settings["reset timer"],
+        )
+        return device_settings
 
     @property
     def pending_update(self):
@@ -349,9 +366,8 @@ class PowerBinarySensor(SwitchingSensor):
         """Initialize the sensor."""
         super().__init__(config, mac, devtype)
         self._measurement = "switch"
-        self._sensor_name = self.get_sensorname()
-        self._name = "ble switch {}".format(self._sensor_name)
-        self._unique_id = "sw_" + self._sensor_name
+        self._name = "ble switch {}".format(self._device_name)
+        self._unique_id = "sw_" + self._device_name
         self._device_class = DEVICE_CLASS_POWER
 
     async def async_update(self):
@@ -369,9 +385,8 @@ class LightBinarySensor(SwitchingSensor):
         """Initialize the sensor."""
         super().__init__(config, mac, devtype)
         self._measurement = "light"
-        self._sensor_name = self.get_sensorname()
-        self._name = "ble light {}".format(self._sensor_name)
-        self._unique_id = "lt_" + self._sensor_name
+        self._name = "ble light {}".format(self._device_name)
+        self._unique_id = "lt_" + self._device_name
         self._device_class = DEVICE_CLASS_LIGHT
 
     def reset_state(self, event=None):
@@ -381,10 +396,9 @@ class LightBinarySensor(SwitchingSensor):
 
     def update(self):
         """Update sensor state and attribute."""
-        reset_timer = self._config[CONF_DEVICE_RESET_TIMER]
         self._state = self._newstate
-        if reset_timer > 0:
-            call_later(self.hass, reset_timer, self.reset_state)
+        if self._reset_timer > 0:
+            call_later(self.hass, self._reset_timer, self.reset_state)
 
 
 class OpeningBinarySensor(SwitchingSensor):
@@ -394,9 +408,8 @@ class OpeningBinarySensor(SwitchingSensor):
         """Initialize the sensor."""
         super().__init__(config, mac, devtype)
         self._measurement = "opening"
-        self._sensor_name = self.get_sensorname()
-        self._name = "ble opening {}".format(self._sensor_name)
-        self._unique_id = "op_" + self._sensor_name
+        self._name = "ble opening {}".format(self._device_name)
+        self._unique_id = "op_" + self._device_name
         self._ext_state = None
         self._device_class = DEVICE_CLASS_OPENING
 
@@ -414,9 +427,8 @@ class MoistureBinarySensor(SwitchingSensor):
         """Initialize the sensor."""
         super().__init__(config, mac, devtype)
         self._measurement = "moisture"
-        self._sensor_name = self.get_sensorname()
-        self._name = "ble moisture {}".format(self._sensor_name)
-        self._unique_id = "mo_" + self._sensor_name
+        self._name = "ble moisture {}".format(self._device_name)
+        self._unique_id = "mo_" + self._device_name
         self._device_class = DEVICE_CLASS_MOISTURE
 
 
@@ -427,9 +439,8 @@ class MotionBinarySensor(SwitchingSensor):
         """Initialize the sensor."""
         super().__init__(config, mac, devtype)
         self._measurement = "motion"
-        self._sensor_name = self.get_sensorname()
-        self._name = "ble motion {}".format(self._sensor_name)
-        self._unique_id = "mn_" + self._sensor_name
+        self._name = "ble motion {}".format(self._device_name)
+        self._unique_id = "mn_" + self._device_name
         self._device_class = DEVICE_CLASS_MOTION
 
     def reset_state(self, event=None):
@@ -439,7 +450,6 @@ class MotionBinarySensor(SwitchingSensor):
 
     def update(self):
         """Update sensor state and attribute."""
-        reset_timer = self._config[CONF_DEVICE_RESET_TIMER]
         self._state = self._newstate
-        if reset_timer > 0:
-            call_later(self.hass, reset_timer, self.reset_state)
+        if self._reset_timer > 0:
+            call_later(self.hass, self._reset_timer, self.reset_state)
