@@ -364,7 +364,7 @@ class HCIdump(Thread):
         def obj0710(xobj):
             (illum,) = ILL_STRUCT.unpack(xobj + b'\x00')
             result_light = 1 if illum == 100 else 0
-            _LOGGER.debug("07 10 mesage received with value: %s, which is converted to light: %s ", illum, result_light)
+            _LOGGER.debug("07 10 message received with value: %s, which is converted to light: %s ", illum, result_light)
             return {"illuminance": illum, "light": 1 if illum == 100 else 0}
 
         def obj0810(xobj):
@@ -390,7 +390,7 @@ class HCIdump(Thread):
         def obj1710(xobj):
             (motion,) = M_STRUCT.unpack(xobj)
             result_motion = 1 if motion == 0 else 0
-            _LOGGER.debug("17 10 mesage received with value: %s, which is converted to motion: %s ", motion, result_motion)
+            _LOGGER.debug("17 10 message received with value: %s, which is converted to motion: %s ", motion, result_motion)
             return {"motion": 1 if motion == 0 else 0}
 
         def obj1810(xobj):
@@ -409,7 +409,7 @@ class HCIdump(Thread):
         def obj0f00(xobj):
             (sensor_light,) = LIGHT_STRUCT.unpack(xobj + b'\x00')
             result_sensor_light = 1 if sensor_light == 100 else 0
-            _LOGGER.debug("0F 00 mesage received with value: %s, which is converted to sensor light: %s ", sensor_light, result_sensor_light)
+            _LOGGER.debug("0F 00 message received with value: %s, which is converted to sensor light: %s ", sensor_light, result_sensor_light)
             return {"sensor light": 1 if sensor_light == 100 else 0}
 
         def objATC_short(xobj):
