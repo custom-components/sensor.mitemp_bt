@@ -106,7 +106,7 @@ class BLEupdaterBinary():
                 mac = data["mac"]
                 batt_attr = None
                 sensortype = data["type"]
-                sw_i, op_i, l_i, mo_i, mn_i, b_i = MMTS_DICT[sensortype][1]
+                sw_i, op_i, l_i, mo_i, mn_i, sl_i, b_i = MMTS_DICT[sensortype][1]
                 if mac not in sensors_by_mac:
                     sensors = []
                     if sw_i != 9:
@@ -119,6 +119,8 @@ class BLEupdaterBinary():
                         sensors.insert(mo_i, MoistureBinarySensor(self.config, mac, sensortype))
                     if mn_i != 9:
                         sensors.insert(mn_i, MotionBinarySensor(self.config, mac, sensortype))
+                    if sl_i != 9:
+                        sensors.insert(sl_i, SensorLightBinarySensor(self.config, mac, sensortype))
                     if len(sensors) != 0:
                         sensors_by_mac[mac] = sensors
                         self.add_entities(sensors)
@@ -179,6 +181,13 @@ class BLEupdaterBinary():
                         motion.schedule_update_ha_state(True)
                     elif motion.ready_for_update is False and motion.enabled is True:
                         hpriority.append(motion)
+                if "sensor light" in data:
+                    sensor_light = sensors[sl_i]
+                    sensor_light.collect(data, batt_attr)
+                    if sensor_light.pending_update is True:
+                        sensor_light.schedule_update_ha_state(True)
+                    elif sensor_light.ready_for_update is False and sensor_light.enabled is True:
+                        hpriority.append(sensor_light)
                 data = None
             ts_now = dt_util.now()
             if ts_now - ts_last < timedelta(seconds=self.period):
@@ -452,3 +461,20 @@ class MotionBinarySensor(SwitchingSensor):
                     self._reset_timer, self._start_timer
                 )
                 async_call_later(self.hass, self._reset_timer, self.reset_state)
+
+
+class SensorLightBinarySensor(SwitchingSensor):
+    """Representation of a Sensor."""
+
+    def __init__(self, config, mac, devtype):
+        """Initialize the sensor."""
+        super().__init__(config, mac, devtype)
+        self._measurement = "sensor light"
+        self._name = "ble sensor light {}".format(self._device_name)
+        self._unique_id = "sl_" + self._device_name
+        self._device_class = None
+
+    @property
+    def icon(self):
+        """Return the icon of the sensor."""
+        return "mdi:lightbulb"

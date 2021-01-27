@@ -73,6 +73,7 @@ H_STRUCT = struct.Struct("<H")
 T_STRUCT = struct.Struct("<h")
 CND_STRUCT = struct.Struct("<H")
 ILL_STRUCT = struct.Struct("<I")
+LIGHT_STRUCT = struct.Struct("<I")
 FMDH_STRUCT = struct.Struct("<H")
 THBV_STRUCT = struct.Struct(">hBBH")
 THVB_STRUCT = struct.Struct("<hHHB")
@@ -362,6 +363,8 @@ class HCIdump(Thread):
 
         def obj0710(xobj):
             (illum,) = ILL_STRUCT.unpack(xobj + b'\x00')
+            result_light = 1 if illum == 100 else 0
+            _LOGGER.debug("07 10 mesage received with value: %s, which is converted to light: %s ", illum, result_light)
             return {"illuminance": illum, "light": 1 if illum == 100 else 0}
 
         def obj0810(xobj):
@@ -386,6 +389,8 @@ class HCIdump(Thread):
 
         def obj1710(xobj):
             (motion,) = M_STRUCT.unpack(xobj)
+            result_motion = 1 if motion == 0 else 0
+            _LOGGER.debug("17 10 mesage received with value: %s, which is converted to motion: %s ", motion, result_motion)
             return {"motion": 1 if motion == 0 else 0}
 
         def obj1810(xobj):
@@ -402,8 +407,10 @@ class HCIdump(Thread):
             return {"temperature": temp / 10, "humidity": humi / 10}
 
         def obj0f00(xobj):
-            (illum,) = ILL_STRUCT.unpack(xobj + b'\x00')
-            return {"illuminance": illum, "motion": 1, "light": 1 if illum == 100 else 0}
+            (sensor_light,) = LIGHT_STRUCT.unpack(xobj + b'\x00')
+            result_sensor_light = 1 if sensor_light == 100 else 0
+            _LOGGER.debug("0F 00 mesage received with value: %s, which is converted to sensor light: %s ", sensor_light, result_sensor_light)
+            return {"sensor light": 1 if sensor_light == 100 else 0}
 
         def objATC_short(xobj):
             (temp, humi, batt, volt) = THBV_STRUCT.unpack(xobj)
@@ -481,7 +488,7 @@ class HCIdump(Thread):
             b'\x19\x10': (obj1910, True, False),
             b'\x0A\x10': (obj0a10, True, True),
             b'\x0D\x10': (obj0d10, False, True),
-            b'\x0F\x00': (obj0f00, True, True),
+            b'\x0F\x00': (obj0f00, True, False),
             b'\x10\x16': (objATC_short, False, True),
             b'\x12\x16': (objATC_long, False, True),
         }
@@ -778,15 +785,6 @@ class HCIdump(Thread):
                     break
                 xdata_point = xnext_point
             binary = binary and binary_data
-            if xvalue_typecode == b'\x17\x10':
-                _LOGGER.debug("17 10 advertisement. result is: %s", result)
-
-            if xvalue_typecode == b'\x0F\x00':
-                _LOGGER.debug("0F 00 advertisement. result is: %s", result)
-
-            if xvalue_typecode == b'\x07\x10':
-                _LOGGER.debug("07 10 advertisement. result is: %s", result)
-
             return result, binary, measuring
 
         if atc_index != -1:
