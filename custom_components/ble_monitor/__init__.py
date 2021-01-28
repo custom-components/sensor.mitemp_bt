@@ -570,7 +570,7 @@ class HCIdump(Thread):
         is_ext_packet = True if data[3] == 0x0d else False
         # check for Xiaomi or ATC service data
         xiaomi_index = data.find(b'\x16\x95\xFE', 15 + 15 if is_ext_packet else 0)
-        atc_index = data.find(b'\x16\x1A\x18', 15)
+        atc_index = data.find(b'\x16\x1A\x18', 15 + 15 if is_ext_packet else 0)
 
         if xiaomi_index == -1 and atc_index == -1:
             return None, None, None
@@ -759,19 +759,21 @@ class HCIdump(Thread):
         if atc_index != -1:
             # parse BLE message in ATC format
 
+            # Check for the atc1441 or custom format
+            is_custom_adv = True if data[atc_index - 1] == 18 else False
+
             # check for BTLE msg size
             msg_length = data[2] + 3
-            is_ext_packet = True if data[2] == 0x1f else False
             if msg_length != len(data):
                 return None, None, None
             # check for MAC presence in message and in service data
-            if is_ext_packet is True:
+            if is_custom_adv is True:
                 atc_mac_reversed = data[atc_index + 3:atc_index + 9]
                 atc_mac = atc_mac_reversed[::-1]
             else:
                 atc_mac = data[atc_index + 3:atc_index + 9]
-            mac_index = atc_index - 1
-            source_mac_reversed = data[mac_index - 7:mac_index - 1]
+            mac_index = atc_index - (22 if is_ext_packet else 8)
+            source_mac_reversed = data[mac_index:mac_index + 6]
             source_mac = source_mac_reversed[::-1]
             if atc_mac != source_mac:
                 return None, None, None
@@ -779,7 +781,7 @@ class HCIdump(Thread):
             if self.discovery is False:
                 if atc_mac not in self.whitelist:
                     return None, None, None
-            packet_id = data[atc_index + 16 if is_ext_packet else atc_index + 15]
+            packet_id = data[atc_index + 16 if is_custom_adv else atc_index + 15]
             try:
                 prev_packet = self.lpacket_ids[atc_index]
             except KeyError:
@@ -788,14 +790,14 @@ class HCIdump(Thread):
                 return None, None, None
             self.lpacket_ids[atc_index] = packet_id
             # extract RSSI byte
-            (rssi,) = struct.unpack("<b", data[msg_length - 1:msg_length])
+            rssi_index = 18 if is_ext_packet else msg_length - 1
+            (rssi,) = struct.unpack("<b", data[rssi_index:rssi_index + 1])
             # strange positive RSSI workaround
             if rssi > 0:
                 rssi = -rssi
+            device_type = data[atc_index + 1:atc_index + 3]
             try:
-                sensor_type, binary_data = ATC_TYPE_DICT[
-                    data[atc_index + 1:atc_index + 3]
-                ]
+                sensor_type, binary_data = ATC_TYPE_DICT[device_type]
             except KeyError:
                 if self.report_unknown:
                     _LOGGER.info(
@@ -806,19 +808,19 @@ class HCIdump(Thread):
                     )
                 return None, None, None
 
-            # ATC data length = message length = 6
-            #     -all bytes before ATC UUID
-            #     -3 bytes ATC UUID + ADtype
-            #     -6 bytes MAC
-            #     -1 Frame packet counter
-            #     -1 byte flags (extended packet only)
-            #     -1 RSSI
-            xdata_length = msg_length - atc_index - (12 if is_ext_packet else 11)
+            # ATC data length = message length
+            # -all bytes before ATC UUID
+            # -3 bytes ATC UUID + ADtype
+            # -6 bytes MAC
+            # -1 Frame packet counter
+            # -1 byte flags (custom adv only)
+            # -1 RSSI (normal, not extended packet only)
+            xdata_length = msg_length - atc_index - (11 if is_custom_adv else 10) - (0 if is_ext_packet else 1)
             if xdata_length < 6:
                 return None, None, None
             xdata_point = atc_index + 9
             # check if atc data start and length is valid
-            if xdata_length != len(data[xdata_point:(-3 if is_ext_packet else -2)]):
+            if xdata_length != len(data[xdata_point:(-3 if (is_custom_adv and not is_ext_packet) else -2)]):
                 return None, None, None
             result = {
                 "rssi": rssi,
